@@ -10,10 +10,10 @@ public class SinglePlayerInputManager : Singleton<SinglePlayerInputManager>
     public Tile SelectedTile { get; private set; }
     public Tile TargetTile { get; private set; }
 
-    [SerializeField] private Vector2 _touchStartPosition;
+    [SerializeField] private Vector2 _inputStartPosition;
     [SerializeField] private Vector2Int _currentSwapDirection;
     private SinglePlayerBoardManager _boardManager => SinglePlayerBoardManager.Instance;
-
+    private bool _isMousePressed = false;
     private void OnEnable()
     {
         EventManager.OnEndSwapTile += OnEndSwapTile;
@@ -59,49 +59,80 @@ public class SinglePlayerInputManager : Singleton<SinglePlayerInputManager>
     private void HandleGameInput()
     {
         if (!CanSwap || !CanInput()) return;
+
         if (Input.touchCount > 0)
         {
-            Touch touch = Input.GetTouch(0);
-            var touchPos = Camera.main.ScreenToWorldPoint(touch.position);
-            RaycastHit2D hit = Physics2D.Raycast(touchPos, Vector2.zero);
-            if (!hit.collider || IsSwapping) return;
-
-            switch (touch.phase)
-            {
-                case TouchPhase.Began:
-                    BeganPhase(touch, hit);
-                    break;
-
-                case TouchPhase.Moved:
-                    MovedPhase(touch, hit);
-                    break;
-
-                case TouchPhase.Ended:
-                    EndedPhase(touch, hit);
-                    break;
-            }
+            HandleTouchInput();
+        }
+        else
+        {
+            HandleMouseInput();
         }
     }
 
-    private void BeganPhase(Touch touch, RaycastHit2D hit)
+    private void HandleTouchInput()
+    {
+        Touch touch = Input.GetTouch(0);
+        var touchPos = Camera.main.ScreenToWorldPoint(touch.position);
+        RaycastHit2D hit = Physics2D.Raycast(touchPos, Vector2.zero);
+        if (!hit.collider || IsSwapping) return;
+
+        switch (touch.phase)
+        {
+            case TouchPhase.Began:
+                BeganPhase(touch.position, hit);
+                break;
+
+            case TouchPhase.Moved:
+                MovedPhase(touch.position, hit);
+                break;
+
+            case TouchPhase.Ended:
+                EndedPhase(touch.position, hit);
+                break;
+        }
+    }
+
+    private void HandleMouseInput()
+    {
+        var mousePos = Camera.main.ScreenToWorldPoint(Input.mousePosition);
+        RaycastHit2D hit = Physics2D.Raycast(mousePos, Vector2.zero);
+        if (!hit.collider || IsSwapping) return;
+
+        if (Input.GetMouseButtonDown(0))
+        {
+            _isMousePressed = true;
+            BeganPhase(Input.mousePosition, hit);
+        }
+        else if (Input.GetMouseButton(0) && _isMousePressed)
+        {
+            MovedPhase(Input.mousePosition, hit);
+        }
+        else if (Input.GetMouseButtonUp(0) && _isMousePressed)
+        {
+            _isMousePressed = false;
+            EndedPhase(Input.mousePosition, hit);
+        }
+    }
+
+    private void BeganPhase(Vector2 inputPosition, RaycastHit2D hit)
     {
         SelectedTile = hit.collider.GetComponent<Tile>();
         if (!SelectedTile) return;
 
-        _touchStartPosition = touch.position;
+        _inputStartPosition = inputPosition;
     }
-    private void MovedPhase(Touch touch, RaycastHit2D hit)
+    private void MovedPhase(Vector2 inputPosition, RaycastHit2D hit)
     {
         if (!SelectedTile) return;
 
-        Vector2 touchPosition = touch.position;
-        Vector2 direction = touchPosition - _touchStartPosition;
+        Vector2 direction = inputPosition - _inputStartPosition;
         _currentSwapDirection = GetSwapDirection(direction);
         TargetTile = hit.collider.GetComponent<Tile>();
 
         if (SelectedTile != TargetTile) CheckToSwapTiles();
     }
-    private void EndedPhase(Touch touch, RaycastHit2D hit)
+    private void EndedPhase(Vector2 inputPosition, RaycastHit2D hit)
     {
         if (IsSwapping) return;
         SelectedTile = TargetTile = null;
